@@ -14,7 +14,7 @@ mkdir -p "$LOCAL_PATH"
 mkdir -p "$CHROOT"
 
 [[ -d "$CHROOT/root" ]] || mkarchroot -C /etc/pacman.conf "$CHROOT/root" \
-    base base-devel
+    base-devel
 
 for package in $PACKAGES; do (
     cd "$package" || ( echo "No such directory: $package"; exit 1 )
