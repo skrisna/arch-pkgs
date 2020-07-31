@@ -6,14 +6,9 @@ set -uo pipefail
 trap 's=$?; echo "$0: Error on line "$LINENO": $BASH_COMMAND"; exit $s' ERR
 
 REPO_URL="https://s3.us-west-1.amazonaws.com/skrisna-arch/repo/x86_64"
-MIRRORLIST_URL="https://www.archlinux.org/mirrorlist/?country=US&protocol=https&use_mirror_status=on"
 
-pacman -Sy --noconfirm pacman-contrib
-
-echo "Updating mirror list"
-curl -s "$MIRRORLIST_URL" | \
-    sed -e 's/^#Server/Server/' -e '/^#/d' | \
-    rankmirrors -n 5 - > /etc/pacman.d/mirrorlist
+reflector --country US --age 12 --protocol https \
+    --sort rate --save /etc/pacman.d/mirrorlist
 
 ### Get infomation from user ###
 hostname=$(dialog --stdout --inputbox "Enter hostname" 0 0) || exit 1
@@ -34,6 +29,12 @@ clear
 devicelist=$(lsblk -dplnx size -o name,size | grep -Ev "boot|rpmb|loop" | tac)
 device=$(dialog --stdout --menu "Select installtion disk" 0 0 0 ${devicelist}) || exit 1
 clear
+
+destination=$(dialog --stdout --menu "Select install destination" 0 0 0 \
+		    "vmware" "VMWare clean install" \
+		    "macos" "MacOS pre-partitioned install") || exit 1
+clear
+
 
 ### Set up logging ###
 exec 1> >(tee "stdout.log")
