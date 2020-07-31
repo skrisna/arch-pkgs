@@ -1,0 +1,53 @@
+# Maintainer: Michael Daffin <michael@daffin.io>
+pkgname=skrisna-base
+pkgver=35
+pkgrel=1
+pkgdesc="System config for skrisna systems"
+arch=(any)
+url="https://github.com/skrisna/arch-pkgs"
+license=(MIT)
+groups=(skrisna)
+
+provides=(vim vi)
+conflicts=(vim vi)
+replaces=(vim vi)
+install=skrisna-base.install
+
+# Base group
+depends=(
+    bash bzip2 coreutils cryptsetup device-mapper dhcpcd diffutils e2fsprogs
+    file filesystem findutils gawk gcc-libs gettext glibc grep gzip inetutils
+    iproute2 iputils less licenses linux logrotate man-db man-pages mdadm
+    pacman pciutils perl procps-ng psmisc s-nail sed shadow sysfsutils
+    systemd-sysvcompat tar texinfo usbutils util-linux which
+)
+# Explicitly removed from the base group:
+#   jfsutils lvm2 nano netctl reiserfsprogs vi xfsprogs
+
+# Extra general packages
+depends+=(
+    sudo ripgrep exa fd tmux wget fzf unzip zip dialog pacman-contrib bat ncdu
+    keybase efibootmgr pv nftables linux-firmware intel-ucode
+)
+
+# Debugging tools
+depends+=(
+    lsof bind-tools mtr socat htop iotop openbsd-netcat strace tcpdump whois
+    iftop dstat
+)
+
+# Shells
+depends+=(zsh grml-zsh-config)
+
+# Filesystems
+depends+=(exfat-utils dosfstools f2fs-tools)
+
+# Editor
+depends+=(neovim)
+
+rootdir=$PWD
+
+package() {
+    cp -a "$rootdir/files/"* "$pkgdir"
+    chmod -R 0750 "$pkgdir/etc/sudoers.d"
+}

@@ -1,0 +1,14 @@
+# Maintainer: Michael Daffin <michael@daffin.io>
+pkgname=skrisna-gaming
+pkgver=31
+pkgrel=1
+pkgdesc="System config for skrisna systems"
+arch=(any)
+url="https://github.com/skrisna/arch-pkgs"
+license=(MIT)
+groups=(skrisna)
+
+depends=(
+    skrisna-desktop steam nvidia nvidia-utils lib32-nvidia-utils lib32-libpulse
+    ttf-liberation wqy-zenhei
+)

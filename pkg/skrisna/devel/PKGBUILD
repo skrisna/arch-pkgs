@@ -1,0 +1,53 @@
+# Maintainer: Michael Daffin <michael@daffin.io>
+pkgname=skrisna-devel
+pkgver=36
+pkgrel=1
+pkgdesc="System config for skrisna systems"
+arch=(any)
+url="https://github.com/skrisna/arch-pkgs"
+license=(MIT)
+groups=(skrisna)
+
+conflicts=(repose)
+replaces=(skrisna-devel-embedded skrisna-devel-languages skrisna-devel-virtualisation skrisna-arch-repo)
+depends=(skrisna-base)
+
+# Base Group
+depends+=(
+    autoconf automake binutils bison fakeroot file findutils flex gawk gcc
+    gettext grep groff gzip libtool m4 make pacman patch pkg-config sed sudo
+    systemd texinfo util-linux which
+)
+
+# General tools
+depends+=(git cmake jq musl aws-cli ddrescue)
+
+# Arch Packaging
+depends+=(devtools aurutils s3cmd)
+
+# Docker
+depends+=(docker docker-compose dnsmasq minikube kubectl)
+
+# Automation tools
+depends+=(terraform)
+
+# Rust
+depends+=(rustup)
+
+# Go
+depends+=(go)
+
+# Python
+depends+=(python-black python-pycodestyle python-pylint flake8)
+
+# Node
+depends+=(yarn npm nodejs prettier)
+
+# Text
+depends+=(vale)
+
+rootdir=$PWD
+
+package() {
+    cp -a "$rootdir/files/"* "$pkgdir"
+}

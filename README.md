@@ -3,7 +3,7 @@
 A set of meta-packages and tooling for managing Arch Linux installs via a custom
 repository.
 
-`pkg/mdaffin` contains the meta-packages for my systems and do not strictly
+`pkg/skrisna` contains the meta-packages for my systems and do not strictly
 follow the Arch Linux packaging guidelines. Instead, I designed the packages
 for easy maintenance. I will sometimes change the contents of the meta-packages
 to suite my requirements, as such you should not use them directly. Instead use
@@ -68,7 +68,7 @@ You can build one or more packages rather then all packages by specifying the
 path to each package.
 
 ```bash
-./bin/build pkg/mdaffin-{base,devel}
+./bin/build pkg/skrisna-{base,devel}
 ```
 
 ## Managing AUR Packages

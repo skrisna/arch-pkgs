@@ -1,0 +1,18 @@
+# Maintainer: Michael Daffin <michael@daffin.io>
+pkgname=skrisna-router
+pkgver=1
+pkgrel=4
+pkgdesc="System config for skrisna systems"
+arch=(any)
+url="https://github.com/skrisna/arch-pkgs"
+license=(MIT)
+groups=(skrisna)
+install=install
+
+depends=(skrisna-base openssh rp-pppoe dnsmasq nftables hostapd)
+
+rootdir=$PWD
+
+package() {
+    cp -a "$rootdir/files/"* "$pkgdir"
+}

@@ -5,8 +5,8 @@
 set -uo pipefail
 trap 's=$?; echo "$0: Error on line "$LINENO": $BASH_COMMAND"; exit $s' ERR
 
-REPO_URL="https://s3.eu-west-2.amazonaws.com/mdaffin-arch/repo/x86_64"
-MIRRORLIST_URL="https://www.archlinux.org/mirrorlist/?country=GB&protocol=https&use_mirror_status=on"
+REPO_URL="https://s3.us-west-1.amazonaws.com/skrisna-arch/repo/x86_64"
+MIRRORLIST_URL="https://www.archlinux.org/mirrorlist/?country=US&protocol=https&use_mirror_status=on"
 
 pacman -Sy --noconfirm pacman-contrib
 
@@ -90,17 +90,17 @@ mount "${part_boot}" /mnt/boot
 
 ### Install and configure the basic system ###
 cat >>/etc/pacman.conf <<EOF
-[mdaffin]
+[skrisna]
 SigLevel = Optional TrustAll
 Server = $REPO_URL
 EOF
 
-pacstrap /mnt mdaffin-router
+pacstrap /mnt skrisna-router
 genfstab -t PARTUUID /mnt >> /mnt/etc/fstab
 echo "${hostname}" > /mnt/etc/hostname
 
 cat >>/mnt/etc/pacman.conf <<EOF
-[mdaffin]
+[skrisna]
 SigLevel = Optional TrustAll
 Server = $REPO_URL
 EOF
