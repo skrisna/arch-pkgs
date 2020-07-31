@@ -20,7 +20,7 @@ depends=(
 
 # Extra general packages
 depends+=(
-    linux efibootmgr sudo exa
+    linux efibootmgr sudo exa dhcpcd
 )
 
 # Debugging tools
