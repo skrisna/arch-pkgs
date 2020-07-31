@@ -1,6 +1,6 @@
 # Maintainer: Michael Daffin <michael@daffin.io>
 pkgname=skrisna-base
-pkgver=2
+pkgver=3
 pkgrel=1
 pkgdesc="System config for skrisna systems"
 arch=(any)
@@ -20,7 +20,7 @@ depends=(
 
 # Extra general packages
 depends+=(
-    linux efibootmgr sudo exa dhcpcd
+    linux efibootmgr sudo exa dhcpcd man-db
 )
 
 # Debugging tools
