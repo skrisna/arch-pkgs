@@ -10,7 +10,7 @@ REPO_URL="https://s3.us-west-1.amazonaws.com/skrisna-arch/repo/x86_64"
 pacman-key --init
 pacman-key --populate archlinux
 
-pacman -S reflector dialog grep
+pacman -S --noconfirm --needed reflector dialog grep
 
 reflector --country US --age 12 --protocol https \
     --sort rate --save /etc/pacman.d/mirrorlist
