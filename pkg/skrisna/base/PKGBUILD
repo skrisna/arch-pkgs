@@ -1,6 +1,6 @@
 # Maintainer: Krishna Subramanian <skrisna@gmail.com>
 pkgname=skrisna-base
-pkgver=3
+pkgver=4
 pkgrel=1
 pkgdesc="System config for skrisna systems"
 arch=(any)
