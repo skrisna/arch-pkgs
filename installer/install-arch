@@ -2,15 +2,27 @@
 # WARNING: this script will destroy data on the selected disk.
 # This script can be run by executing the following:
 #   curl -sL https://git.io/JJa05 | bash
-set -uo pipefail
+set -xuo pipefail
 trap 's=$?; echo "$0: Error on line "$LINENO": $BASH_COMMAND"; exit $s' ERR
 
 REPO_URL="https://s3.us-west-1.amazonaws.com/skrisna-arch/repo/x86_64"
+hostname=arch
+user=user
+password=pass
+#boot_uuid=e5eb17fb-0ad4-47c2-8709-b54773700223
+#root_uuid=987819bb-8ac5-4765-8c69-d6830931957b
+
+if false; then
+
+umount --all || true
+
+
 
 pacman-key --init
 pacman-key --populate archlinux
 
-pacman -S --noconfirm --needed reflector dialog grep
+pacman -S --noconfirm --needed reflector dialog grep gptfdisk \
+	dosfstools f2fs-tools
 
 reflector --country US --age 12 --protocol https \
     --sort rate --save /etc/pacman.d/mirrorlist
@@ -40,21 +52,71 @@ devicelist=$(lsblk -dplnx size -o name,size | grep -Ev "boot|rpmb|loop" | tac)
 device=$(dialog --stdout --menu "Select installtion disk" 0 0 0 ${devicelist}) || exit 1
 clear
 
-echo $target
-echo $device
-exit 1
+fi
+### if false; then
+device=/dev/sda
+target=macos
 
 ### Set up logging ###
 exec 1> >(tee "stdout.log")
 exec 2> >(tee "stderr.log")
 
-timedatectl set-ntp true
+timedatectl set-ntp true 2>/dev/null || true
 
-### Partition and mount
-echo 'label: gpt' | 
+### Partition
+# For vmware, clear disk, create boot and root 
+# For macos, don't clear disk, create only root, use boot from macos
+if [[ $target == vmware ]]; then
 
-sgdisk -n 0:+128M:0 /dev/sda
+	echo 'label: gpt' | sfdisk $device
+	boot_uuid=$(uuidgen)
+	sgdisk -n 0:0:+200MiB -t 0:ef00 -u 0:$boot_uuid -A 0:set:2 /dev/sda
+	while [[ ! -e /dev/disk/by-partuuid/$boot_uuid ]]; do 
+		echo "boot_uuid /dev/disk/by-partuuid/$boot_uuid not found. sleeping 1s..."
+		sleep 1
+	done
+	echo "boot_uuid /dev/disk/by-partuuid/$boot_uuid found."
+	wipefs "/dev/disk/by-partuuid/$boot_uuid"
+	mkfs.fat -F32 /dev/disk/by-partuuid/$boot_uuid
 
+elif [[ $target == macos ]]; then
+
+	# First partition is EFI/Boot
+	boot_uuid=$(sgdisk -i 1 /dev/sda | \
+			grep 'Partition unique GUID' | \
+			awk '{print $4}' | \
+			tr '[:upper:]' '[:lower:]')
+	while [[ ! -e /dev/disk/by-partuuid/$boot_uuid ]]; do 
+		echo "boot_uuid /dev/disk/by-partuuid/$boot_uuid not found. sleeping 1s..."
+		sleep 1
+	done
+	echo "boot_uuid /dev/disk/by-partuuid/$boot_uuid found."
+	boot_path=$(realpath /dev/disk/by-partuuid/$boot_uuid)
+fi
+
+root_uuid=$(uuidgen)
+if [[ $target == vmware ]]; then
+	# Create a new partition with no offset
+	sgdisk -n 0:0:0 -t 0:8300 -u 0:$root_uuid /dev/sda
+	sleep 1
+elif [[ $target == macos ]]; then
+	# Create a new partition with 128MB offset
+	sgdisk -n 0:+128MiB:0 -t 0:8300 -u 0:$root_uuid /dev/sda
+	sleep 1
+fi
+while [[ ! -e /dev/disk/by-partuuid/$root_uuid ]]; do 
+	echo "root_uuid /dev/disk/by-partuuid/$root_uuid not found. sleeping 1s..."
+	sleep 1
+done
+echo "root_uuid /dev/disk/by-partuuid/$root_uuid found."
+root_path=$(realpath /dev/disk/by-partuuid/$root_uuid)
+wipefs $root_path
+mkfs.f2fs -f $root_path
+
+### Mount
+mount $root_path /mnt
+mkdir -p /mnt/boot
+mount $boot_path /mnt/boot
 
 ### Install and configure the basic system ###
 cat >>/etc/pacman.conf <<EOF
@@ -64,7 +126,8 @@ Server = $REPO_URL
 EOF
 
 pacstrap /mnt skrisna-base
-genfstab -t PARTUUID /mnt >> /mnt/etc/fstab
+
+genfstab -t PARTUUID /mnt | grep -v zram >> /mnt/etc/fstab
 echo "${hostname}" > /mnt/etc/hostname
 
 cat >>/mnt/etc/pacman.conf <<EOF
@@ -83,7 +146,7 @@ cat <<EOF > /mnt/boot/loader/entries/arch.conf
 title    Arch Linux
 linux    /vmlinuz-linux
 initrd   /initramfs-linux.img
-options  root=PARTUUID=$(blkid -s PARTUUID -o value "$part_root") rw
+options  root=PARTUUID=$(blkid -s PARTUUID -o value $root_path) rw
 EOF
 
 echo "LANG=en_US.UTF-8" > /mnt/etc/locale.conf
