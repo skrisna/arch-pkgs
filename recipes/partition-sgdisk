@@ -1,0 +1,5 @@
+# Add a new partition starting at an offset of 128M from the last partition
+# Take up all the remaining space
+
+
+sgdisk -n 0:+128M:0 -t 0:/dev/sda

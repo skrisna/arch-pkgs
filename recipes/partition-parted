@@ -1,0 +1,20 @@
+devicelist=$(lsblk -dplnx size -o name,size | grep -Ev "boot|rpmb|loop" | tac)
+device=$(dialog --stdout --menu "Select installtion disk" 0 0 0 ${devicelist}) || exit 1
+clear
+
+destination=$(dialog --stdout --menu "Select install destination" 0 0 0 \
+		    "vmware" "VMWare clean install" \
+		    "macos" "MacOS pre-partitioned install") || exit 1
+clear
+
+### Setup the disk and partitions ###
+swap_size=$(free --mebi | awk '/Mem:/ {print $2}')
+swap_end=$(( $swap_size + 129 + 1 ))MiB
+
+parted --script "${device}" -- mklabel gpt \
+  mkpart ESP fat32 1Mib 129MiB \
+  set 1 boot on \
+  mkpart primary linux-swap 129MiB ${swap_end} \
+  mkpart primary ext4 ${swap_end} 100%
+
+
