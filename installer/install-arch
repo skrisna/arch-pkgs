@@ -12,6 +12,12 @@ password=pass
 #boot_uuid=e5eb17fb-0ad4-47c2-8709-b54773700223
 #root_uuid=987819bb-8ac5-4765-8c69-d6830931957b
 
+pacman-key --init
+pacman-key --populate archlinux
+
+pacman -S --noconfirm --needed reflector dialog grep gptfdisk \
+	dosfstools f2fs-tools lvm2
+
 if false; then
 
 umount --all || true
@@ -94,24 +100,39 @@ elif [[ $target == macos ]]; then
 	boot_path=$(realpath /dev/disk/by-partuuid/$boot_uuid)
 fi
 
-root_uuid=$(uuidgen)
+root_uuid1=$(uuidgen)
+root_uuid2=$(uuidgen)
 if [[ $target == vmware ]]; then
 	# Create a new partition with no offset
 	sgdisk -n 0:0:0 -t 0:8300 -u 0:$root_uuid /dev/sda
 	sleep 1
 elif [[ $target == macos ]]; then
 	# Create a new partition with 128MB offset
-	sgdisk -n 0:+128MiB:0 -t 0:8300 -u 0:$root_uuid /dev/sda
+	sgdisk  -n 0:+128MiB:+16GiB -t 0:8300 -u 0:$root_uuid1 \
+		-n 0:+128MiB:+16GiB -t 0:8300 -u 0:$root_uuid2 \
+		/dev/sda
 	sleep 1
 fi
-while [[ ! -e /dev/disk/by-partuuid/$root_uuid ]]; do 
-	echo "root_uuid /dev/disk/by-partuuid/$root_uuid not found. sleeping 1s..."
+while [[ ! -e /dev/disk/by-partuuid/$root_uuid1 ]]; do 
+	echo "root_uuid /dev/disk/by-partuuid/$root_uuid1 not found. sleeping 1s..."
 	sleep 1
 done
-echo "root_uuid /dev/disk/by-partuuid/$root_uuid found."
-root_path=$(realpath /dev/disk/by-partuuid/$root_uuid)
-wipefs $root_path
-mkfs.f2fs -f $root_path
+echo "root_uuid /dev/disk/by-partuuid/$root_uuid1 found."
+root_path1=$(realpath /dev/disk/by-partuuid/$root_uuid1)
+while [[ ! -e /dev/disk/by-partuuid/$root_uuid2 ]]; do 
+	echo "root_uuid /dev/disk/by-partuuid/$root_uuid2 not found. sleeping 1s..."
+	sleep 1
+done
+echo "root_uuid /dev/disk/by-partuuid/$root_uuid2 found."
+root_path2=$(realpath /dev/disk/by-partuuid/$root_uuid2)
+
+wipefs --all $root_path1
+wipefs --all $root_path2
+
+pvcreate $root_path1
+
+# Setup LUKS on LVM
+# https://wiki.archlinux.org/index.php/Dm-crypt/Encrypting_an_entire_system#LUKS_on_LVM
 
 ### Mount
 mount $root_path /mnt
@@ -125,7 +146,7 @@ SigLevel = Optional TrustAll
 Server = $REPO_URL
 EOF
 
-pacstrap /mnt skrisna-base
+pacstrap /mnt skrisna-base lvm2
 
 genfstab -t PARTUUID /mnt | grep -v zram >> /mnt/etc/fstab
 echo "${hostname}" > /mnt/etc/hostname
@@ -150,6 +171,8 @@ options  root=PARTUUID=$(blkid -s PARTUUID -o value $root_path) rw
 EOF
 
 echo "LANG=en_US.UTF-8" > /mnt/etc/locale.conf
+
+# Modify mkinitcpio and run mkinitcpio -p linux
 
 arch-chroot /mnt useradd -mU -s /usr/bin/zsh -G wheel,uucp,video,audio,storage,games,input "$user"
 arch-chroot /mnt chsh -s /usr/bin/zsh
