@@ -1,0 +1,36 @@
+
+device=$1
+settings=$2
+
+# First partition is EFI/Boot
+uuid=$(sgdisk -i 1 $device | \
+		grep 'Partition unique GUID' | \
+		awk '{print $4}' | \
+		tr '[:upper:]' '[:lower:]')
+while [[ ! -e /dev/disk/by-partuuid/$uuid ]]; do 
+	echo "boot_uuid /dev/disk/by-partuuid/$uuid not found. sleeping 1s..."
+	sleep 1
+done
+echo "boot_uuid /dev/disk/by-partuuid/$uuid found."
+boot_path=$(realpath /dev/disk/by-partuuid/$uuid)
+
+# Just for illustration, create two new partitions of 6Gb each
+root_path=()
+for (( i=0; i<2; i++ )); do
+	uuid=$(uuidgen)
+	sgdisk  -n 0:+128MiB:+6GiB -t 0:8300 -u 0:$uuid \
+		$device
+
+	while [[ ! -e /dev/disk/by-partuuid/$uuid ]]; do 
+		echo "root_uuid:$i /dev/disk/by-partuuid/$uuid not found. sleeping 1s..."
+		sleep 1
+	done
+	echo "root_uuid:$i /dev/disk/by-partuuid/$uuid found."
+	root_path+=( $(realpath /dev/disk/by-partuuid/$uuid) )
+done
+
+function join { local IFS="$1"; shift; echo "$*"; }
+root_path_=$( join , "${root_path[@]}" )
+
+echo "boot_path=$boot_path" >> $settings
+echo "IFS=',' read -r -a root_path <<< \"$root_path_\"" >> $settings

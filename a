@@ -1,0 +1,1 @@
+echo $(echo /dev/sda11 | perl -pe 's@^.*?(\d+)@\1@;')

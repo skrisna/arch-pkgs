@@ -1,0 +1,40 @@
+
+set -euo pipefail
+trap 's=$?; echo "$0: Error on line "$LINENO": $BASH_COMMAND"; exit $s' ERR
+
+device=$1
+out=$2
+
+# Zap the partitions
+sgdisk -Z /$device
+uuid=$(uuidgen)
+sgdisk -n 0:0:+200MiB -t 0:ef00 -u 0:$uuid -A 0:set:2 $device
+while [[ ! -e /dev/disk/by-partuuid/$uuid ]]; do 
+	echo "boot_uuid /dev/disk/by-partuuid/$uuid not found. sleeping 1s..."
+	sleep 1
+done
+echo "boot_uuid /dev/disk/by-partuuid/$uuid found."
+boot_path=$(realpath /dev/disk/by-partuuid/$uuid)
+
+wipefs --force --all "$boot_path"
+mkfs.fat -F32 $boot_path
+
+# Just for illustration, create two new partitions of 6Gb each
+root_path=()
+for (( i=0; i<2; i++ )); do
+	uuid=$(uuidgen)
+	sgdisk  -n 0:0:+6GiB -t 0:8300 -u 0:$uuid \
+		$device
+
+	while [[ ! -e /dev/disk/by-partuuid/$uuid ]]; do 
+		echo "root_uuid:$i /dev/disk/by-partuuid/$uuid not found. sleeping 1s..."
+		sleep 1
+	done
+	echo "root_uuid:$i /dev/disk/by-partuuid/$uuid found."
+	root_path+=( $(realpath /dev/disk/by-partuuid/$uuid) )
+done
+
+function join { local IFS="$1"; shift; echo "$*"; }
+root_path=$( join , "${root_path[@]}" )
+
+echo "$boot_path $root_path" > $out

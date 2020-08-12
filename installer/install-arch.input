@@ -1,0 +1,49 @@
+settings=$1
+rm -f $settings
+touch $settings
+
+### Get infomation from user ###
+hostname=$(dialog --stdout --inputbox "Enter hostname" 0 0) || exit 1
+clear
+: ${hostname:?"hostname cannot be empty"}
+echo "hostname=$hostname" >> $settings
+
+user=$(dialog --stdout --inputbox "Enter admin username" 0 0) || exit 1
+clear
+: ${user:?"user cannot be empty"}
+echo "user=$user" >> $settings
+
+password=$(dialog --stdout --passwordbox "Enter admin password" 0 0) || exit 1
+clear
+: ${password:?"password cannot be empty"}
+password_=$(dialog --stdout --passwordbox "Enter admin password again" 0 0) || exit 1
+clear
+[[ "$password" == "$password_" ]] || ( echo "Passwords did not match"; exit 1; )
+
+lukspass=$(dialog --stdout --passwordbox "Enter luks password" 0 0) || exit 1
+clear
+: ${lukspass:?"password cannot be empty"}
+lukspass_=$(dialog --stdout --passwordbox "Enter luks password again" 0 0) || exit 1
+clear
+[[ "$lukspass" == "$lukspass_" ]] || ( echo "Passwords did not match"; exit 1; )
+
+target=$(dialog --stdout --menu "Select install target" 0 0 0 \
+		    "vmware" "VMWare - fresh install" \
+		    "macos" "MacOS - append to selected disk") || exit 1
+clear
+echo "target=$target" >> $settings
+
+devicelist=$(lsblk -dplnx size -o name,size | grep -Ev "boot|rpmb|loop" | sort)
+device=$(dialog --stdout --menu "Select installtion disk" 0 0 0 ${devicelist}) || exit 1
+clear
+echo "device=$device" >> $settings
+
+vg=$(dialog --stdout --inputbox "Enter volume group" 0 0) || exit 1
+clear
+: ${vg:?"vg cannot be empty"}
+echo "vg=$vg" >> $settings
+
+cryptname=$(dialog --stdout --inputbox "Enter cryptname" 0 0) || exit 1
+clear
+: ${cryptname:?"cryptname cannot be empty"}
+echo "cryptname=$cryptname" >> $settings

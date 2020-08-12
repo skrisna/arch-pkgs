@@ -1,0 +1,11 @@
+
+### Partition
+if [[ $target == vmware ]]; then
+
+	
+	. $0.$target $device 
+
+
+elif [[ $target == macos ]]; then
+
+fi

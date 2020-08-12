@@ -1,122 +1,72 @@
 #!/bin/bash
+(return 0 2>/dev/null) && sourced=1 || sourced=0
+if [ $sourced == 1 ]; then
+	echo "Don't source this file"
+	return
+fi
+
 # WARNING: this script will destroy data on the selected disk.
 # This script can be run by executing the following:
 #   curl -sL https://git.io/JJa05 | bash
-set -xuo pipefail
+set -euo pipefail
 trap 's=$?; echo "$0: Error on line "$LINENO": $BASH_COMMAND"; exit $s' ERR
 
 REPO_URL="https://s3.us-west-1.amazonaws.com/skrisna-arch/repo/x86_64"
-hostname=arch
-user=user
-password=pass
-#boot_uuid=e5eb17fb-0ad4-47c2-8709-b54773700223
-#root_uuid=987819bb-8ac5-4765-8c69-d6830931957b
 
 if false; then
 
-umount --all || true
-
-
+umount -R /mnt || true
 
 pacman-key --init
 pacman-key --populate archlinux
 
 pacman -S --noconfirm --needed reflector dialog grep gptfdisk \
-	dosfstools f2fs-tools
+	dosfstools f2fs-tools lvm2
 
 reflector --country US --age 12 --protocol https \
     --sort rate --save /etc/pacman.d/mirrorlist
 
-### Get infomation from user ###
-hostname=$(dialog --stdout --inputbox "Enter hostname" 0 0) || exit 1
-clear
-: ${hostname:?"hostname cannot be empty"}
+. $0.input settings
 
-user=$(dialog --stdout --inputbox "Enter admin username" 0 0) || exit 1
-clear
-: ${user:?"user cannot be empty"}
-
-password=$(dialog --stdout --passwordbox "Enter admin password" 0 0) || exit 1
-clear
-: ${password:?"password cannot be empty"}
-password2=$(dialog --stdout --passwordbox "Enter admin password again" 0 0) || exit 1
-clear
-[[ "$password" == "$password2" ]] || ( echo "Passwords did not match"; exit 1; )
-
-target=$(dialog --stdout --menu "Select install target" 0 0 0 \
-		    "vmware" "VMWare - selected disk cleared" \
-		    "macos" "MacOS - selected disk appended") || exit 1
-clear
-
-devicelist=$(lsblk -dplnx size -o name,size | grep -Ev "boot|rpmb|loop" | tac)
-device=$(dialog --stdout --menu "Select installtion disk" 0 0 0 ${devicelist}) || exit 1
-clear
-
-fi
-### if false; then
-device=/dev/sda
-target=macos
+# works only for systemd hosts
+(systemctl > /dev/null 2>&1) && timedatectl set-ntp true || true
 
 ### Set up logging ###
 exec 1> >(tee "stdout.log")
 exec 2> >(tee "stderr.log")
 
-timedatectl set-ntp true 2>/dev/null || true
+tf=`mktemp`
+. $0.$target/partition $device settings
 
-### Partition
-# For vmware, clear disk, create boot and root 
-# For macos, don't clear disk, create only root, use boot from macos
-if [[ $target == vmware ]]; then
+# boot_path is assumed to be already formatted
 
-	echo 'label: gpt' | sfdisk $device
-	boot_uuid=$(uuidgen)
-	sgdisk -n 0:0:+200MiB -t 0:ef00 -u 0:$boot_uuid -A 0:set:2 /dev/sda
-	while [[ ! -e /dev/disk/by-partuuid/$boot_uuid ]]; do 
-		echo "boot_uuid /dev/disk/by-partuuid/$boot_uuid not found. sleeping 1s..."
-		sleep 1
-	done
-	echo "boot_uuid /dev/disk/by-partuuid/$boot_uuid found."
-	wipefs "/dev/disk/by-partuuid/$boot_uuid"
-	mkfs.fat -F32 /dev/disk/by-partuuid/$boot_uuid
-
-elif [[ $target == macos ]]; then
-
-	# First partition is EFI/Boot
-	boot_uuid=$(sgdisk -i 1 /dev/sda | \
-			grep 'Partition unique GUID' | \
-			awk '{print $4}' | \
-			tr '[:upper:]' '[:lower:]')
-	while [[ ! -e /dev/disk/by-partuuid/$boot_uuid ]]; do 
-		echo "boot_uuid /dev/disk/by-partuuid/$boot_uuid not found. sleeping 1s..."
-		sleep 1
-	done
-	echo "boot_uuid /dev/disk/by-partuuid/$boot_uuid found."
-	boot_path=$(realpath /dev/disk/by-partuuid/$boot_uuid)
-fi
-
-root_uuid=$(uuidgen)
-if [[ $target == vmware ]]; then
-	# Create a new partition with no offset
-	sgdisk -n 0:0:0 -t 0:8300 -u 0:$root_uuid /dev/sda
-	sleep 1
-elif [[ $target == macos ]]; then
-	# Create a new partition with 128MB offset
-	sgdisk -n 0:+128MiB:0 -t 0:8300 -u 0:$root_uuid /dev/sda
-	sleep 1
-fi
-while [[ ! -e /dev/disk/by-partuuid/$root_uuid ]]; do 
-	echo "root_uuid /dev/disk/by-partuuid/$root_uuid not found. sleeping 1s..."
-	sleep 1
+nroot=${#root_path[@]}
+for (( i=0; i<$nroot; i++ )); do
+	wipefs --force --all "${root_path[$i]}"
+	pvcreate "${root_path[$i]}"
 done
-echo "root_uuid /dev/disk/by-partuuid/$root_uuid found."
-root_path=$(realpath /dev/disk/by-partuuid/$root_uuid)
-wipefs $root_path
-mkfs.f2fs -f $root_path
 
-### Mount
-mount $root_path /mnt
+vgcreate ${vg} ${root_path[@]}
+lvcreate -L 4G -n ${cryptname}-root -y ${vg}
+lvcreate -L 500M -n ${cryptname}-swap -y ${vg}
+lvcreate -L 500M -n ${cryptname}-tmp -y ${vg}
+lvcreate -L 4G -n ${cryptname}-home -y ${vg}
+
+echo -n $lukspass | cryptsetup luksFormat -vq /dev/${vg}/${cryptname}-root -
+echo -n $lukspass | cryptsetup -d- --allow-discards --persistent open /dev/${vg}/${cryptname}-root root
+
+mkfs.f2fs -f /dev/mapper/root
+mount /dev/mapper/root /mnt/
 mkdir -p /mnt/boot
 mount $boot_path /mnt/boot
+
+mkdir -p -m 700 /mnt/etc/luks-keys
+dd if=/dev/random of=/mnt/etc/luks-keys/home bs=1 count=256 status=progress
+cryptsetup luksFormat -vq /dev/${vg}/${cryptname}-home /mnt/etc/luks-keys/home 
+cryptsetup -d /mnt/etc/luks-keys/home --allow-discards --persistent open /dev/${vg}/${cryptname}-home home
+mkfs.f2fs -f /dev/mapper/home 
+mkdir -p /mnt/home
+mount /dev/mapper/home /mnt/home
 
 ### Install and configure the basic system ###
 cat >>/etc/pacman.conf <<EOF
@@ -125,10 +75,41 @@ SigLevel = Optional TrustAll
 Server = $REPO_URL
 EOF
 
-pacstrap /mnt skrisna-base
+#pacstrap /mnt base base-devel linux linux-headers \
+#	lvm2 broadcom-wl f2fs-tools wpa_supplicant neovim networkmanager libnm \
+#	dkms
+# install linux-lts linux-lts-headers
+pacstrap /mnt base base-devel linux-lts linux-lts-headers dkms vim lvm2 f2fs-tools
 
-genfstab -t PARTUUID /mnt | grep -v zram >> /mnt/etc/fstab
+fi
+. settings
+
+perl -ni -e 'print unless /^HOOKS\+=\( udev/;' /mnt/etc/mkinitcpio.conf
+cat <<_E_ >> /mnt/etc/mkinitcpio.conf
+HOOKS+=( udev keyboard keymap lvm2 encrypt filesystems fsck )
+_E_
+arch-chroot /mnt mkinitcpio -p linux-lts
+
+# Only include / /boot and /home mounts, ignore everything else
+genfstab -t PARTUUID /mnt | \
+	perl -e ' 
+local $/; 
+@parts = split(/\n\n/, <>); 
+@parts = grep { m@\n\s*\S+\s+(/|/boot|/home)\s+@ } @parts; 
+print join("\n\n", @parts), "\n";
+' >> /mnt/etc/fstab 
 echo "${hostname}" > /mnt/etc/hostname
+
+cat <<_E_ >> /mnt/etc/crypttab
+# swap	/dev/${vg}/${cryptname}-swap	/dev/urandom	swap,cipher=aes-xts-plain64,size=256
+# tmp	/dev/${vg}/${cryptname}-tmp	/dev/urandom	tmp,cipher=aes-xts-plain64,size=256
+home	/dev/${vg}/${cryptname}-home	/etc/luks-keys/home
+_E_
+
+cat <<_E_ >> /mnt/etc/fstab
+# /dev/mapper/swap        none    swap            sw              0       0
+# /dev/mapper/tmp         /tmp    tmpfs           defaults        0       0
+_E_
 
 cat >>/mnt/etc/pacman.conf <<EOF
 [skrisna]
@@ -143,16 +124,17 @@ default arch
 EOF
 
 cat <<EOF > /mnt/boot/loader/entries/arch.conf
-title    Arch Linux
-linux    /vmlinuz-linux
-initrd   /initramfs-linux.img
-options  root=PARTUUID=$(blkid -s PARTUUID -o value $root_path) rw
+title    Arch Linux LTS
+linux    /vmlinuz-linux-lts
+initrd   /initramfs-linux-lts.img
+options  cryptdevice=UUID=$(blkid -s UUID -o value /dev/${vg}/${cryptname}-root):root root=/dev/mapper/root rw
 EOF
 
 echo "LANG=en_US.UTF-8" > /mnt/etc/locale.conf
 
-arch-chroot /mnt useradd -mU -s /usr/bin/zsh -G wheel,uucp,video,audio,storage,games,input "$user"
-arch-chroot /mnt chsh -s /usr/bin/zsh
+# Modify mkinitcpio and run mkinitcpio -p linux
 
-echo "$user:$password" | chpasswd --root /mnt
+# arch-chroot /mnt useradd -mU -s /usr/bin/zsh -G wheel,uucp,video,audio,storage,games,input "$user"
+# arch-chroot /mnt chsh -s /usr/bin/zsh
+# echo "$user:$password" | chpasswd --root /mnt
 echo "root:$password" | chpasswd --root /mnt

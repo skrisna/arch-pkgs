@@ -1,0 +1,20 @@
+set -euo pipefail
+trap 's=$?; echo "$0: Error on line "$LINENO": $BASH_COMMAND"; exit $s' ERR
+
+. settings
+
+umount -Rq /mnt || true
+cryptsetup close root || true
+cryptsetup close /dev/${vg}/${cryptname}-root || true
+cryptsetup close home || true
+cryptsetup close /dev/${vg}/${cryptname}-home || true
+
+vgremove -y 	${vg}
+
+nroot=${#root_path[@]}
+for (( i=0; i<$nroot; i++ )); do
+	pvremove -y 	${root_path[$i]}
+	wipefs --force --all ${root_path[$i]}
+	read disk partnum <<<$(echo ${root_path[$i]} | perl -pe 's@^(.*?)(\d+)@\1 \2@;')
+	sgdisk -d $partnum $disk
+done

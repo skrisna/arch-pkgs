@@ -1,0 +1,10 @@
+hostname=arch
+user=user
+target=macos
+device=/dev/sda
+vg=vg0
+cryptname=crypt0
+password=pass
+lukspass=pass
+boot_path=/dev/sda1
+IFS=',' read -r -a root_path <<< "/dev/sda3,/dev/sda4"
